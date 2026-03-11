@@ -571,28 +571,64 @@ export default function App() {
                 
                 {/* Metric Cards Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-2xl shadow-md text-white flex flex-col justify-center relative overflow-hidden">
-                    <PieChart className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32" />
-                    <p className="text-blue-100 font-medium mb-1">Total Leads (ทั้งหมด)</p>
+                  <div 
+                    className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-2xl shadow-md text-white flex flex-col justify-center relative overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group"
+                    onDoubleClick={() => setDrillDown({ isOpen: true, title: 'Total Leads (ทั้งหมด)', data: filteredDashboardData })}
+                  >
+                    <PieChart className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32 group-hover:opacity-30 transition-opacity" />
+                    <p className="text-blue-100 font-medium mb-1 flex items-center justify-between">
+                      Total Leads (ทั้งหมด)
+                      <span className="text-[10px] bg-blue-700/50 px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">Double-click เจาะลึก</span>
+                    </p>
                     <h2 className="text-4xl lg:text-5xl font-bold">{dashboardStats.total.toLocaleString()} <span className="text-base lg:text-lg font-normal">รายการ</span></h2>
                   </div>
 
-                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 p-6 rounded-2xl shadow-md text-white flex flex-col justify-center relative overflow-hidden">
-                    <CheckSquare className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32" />
-                    <p className="text-indigo-100 font-medium mb-1">จำนวนที่มียอด Sales</p>
+                  <div 
+                    className="bg-gradient-to-br from-indigo-500 to-indigo-600 p-6 rounded-2xl shadow-md text-white flex flex-col justify-center relative overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group"
+                    onDoubleClick={() => setDrillDown({ 
+                      isOpen: true, 
+                      title: 'รายการที่มียอด Sales', 
+                      data: filteredDashboardData.filter(d => d.total_amount && String(d.total_amount).trim() !== '') 
+                    })}
+                  >
+                    <CheckSquare className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32 group-hover:opacity-30 transition-opacity" />
+                    <p className="text-indigo-100 font-medium mb-1 flex items-center justify-between">
+                      จำนวนที่มียอด Sales
+                      <span className="text-[10px] bg-indigo-700/50 px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">Double-click เจาะลึก</span>
+                    </p>
                     <h2 className="text-4xl lg:text-5xl font-bold">{dashboardStats.totalSalesCount.toLocaleString()} <span className="text-base lg:text-lg font-normal">รายการ</span></h2>
                   </div>
                   
-                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-2xl shadow-md text-white flex flex-col justify-center relative overflow-hidden">
-                    <DollarSign className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32" />
-                    <p className="text-emerald-100 font-medium mb-1">ยอดรวม Total Amount</p>
+                  <div 
+                    className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-2xl shadow-md text-white flex flex-col justify-center relative overflow-hidden cursor-pointer hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group"
+                    onDoubleClick={() => setDrillDown({ 
+                      isOpen: true, 
+                      title: 'รายการทั้งหมดที่นำมาคำนวณยอด Amount', 
+                      data: filteredDashboardData.filter(d => d.total_amount && String(d.total_amount).trim() !== '') 
+                    })}
+                  >
+                    <DollarSign className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32 group-hover:opacity-30 transition-opacity" />
+                    <p className="text-emerald-100 font-medium mb-1 flex items-center justify-between">
+                      ยอดรวม Total Amount
+                      <span className="text-[10px] bg-emerald-700/50 px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">Double-click เจาะลึก</span>
+                    </p>
                     <h2 className="text-3xl lg:text-4xl font-bold truncate">
                       ฿ {dashboardStats.totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                     </h2>
                   </div>
                   
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
-                    <p className="text-slate-500 font-medium mb-1 text-sm">การแยก discriptions (Ads)</p>
+                  <div 
+                    className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center cursor-pointer hover:shadow-md hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1 group relative"
+                    onDoubleClick={() => setDrillDown({ 
+                      isOpen: true, 
+                      title: 'รายการที่พบข้อมูล Ads', 
+                      data: filteredDashboardData.filter(d => d.desc_ads && d.desc_ads !== '') 
+                    })}
+                  >
+                    <p className="text-slate-500 font-medium mb-1 text-sm flex items-center justify-between">
+                      การแยก discriptions (Ads)
+                      <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity border border-blue-100">Double-click เจาะลึก</span>
+                    </p>
                     <h3 className="text-2xl font-bold text-slate-800">
                       {filteredDashboardData.filter(d => d.desc_ads && d.desc_ads !== '').length.toLocaleString()}
                     </h3>
