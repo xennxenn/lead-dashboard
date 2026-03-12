@@ -85,6 +85,10 @@ export default function App() {
   const [isFetchingSheet, setIsFetchingSheet] = useState(false);
   const [sheetMatchedData, setSheetMatchedData] = useState([]);
   const [sheetError, setSheetError] = useState('');
+  
+  // States สำหรับ Filter แท็บ Sheets
+  const [sheetSearchTerm, setSheetSearchTerm] = useState('');
+  const [sheetFilters, setSheetFilters] = useState({});
 
   const availableColumns = [
     { id: 'Lead_no', label: 'Lead No.' },
@@ -489,6 +493,15 @@ export default function App() {
     return options;
   }, [mergedData]);
 
+  const sheetFilterDropdownOptions = useMemo(() => {
+    const options = {};
+    sheetReportColumns.forEach(col => {
+      const uniqueVals = [...new Set(sheetMatchedData.map(row => String(row[col.id] || '').trim()))];
+      options[col.id] = uniqueVals.sort();
+    });
+    return options;
+  }, [sheetMatchedData]);
+
   const applyFilters = (data, search, filters) => {
     return data.filter(row => {
       if (search && !Object.values(row).some(val => String(val || '').toLowerCase().includes(search.toLowerCase()))) return false;
@@ -504,6 +517,7 @@ export default function App() {
 
   const filteredDashboardData = useMemo(() => applyFilters(mergedData, dashSearchTerm, dashFilters), [mergedData, dashSearchTerm, dashFilters]);
   const filteredTableData = useMemo(() => applyFilters(mergedData, tableSearchTerm, tableFilters), [mergedData, tableSearchTerm, tableFilters]);
+  const filteredSheetData = useMemo(() => applyFilters(sheetMatchedData, sheetSearchTerm, sheetFilters), [sheetMatchedData, sheetSearchTerm, sheetFilters]);
 
   // Dashboard Calculations
   const dashboardStats = useMemo(() => {
@@ -587,8 +601,10 @@ export default function App() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const FilterSection = ({ searchTerm, setSearchTerm, filters, setFilters }) => {
-    const filterableCols = ['stage_name', 'branch_no', 'province', 'create_month', 'create_year', 'owner_name', 'source_name', 'site_name', 'desc_ads', 'desc_opportunity', 'desc_cause', 'desc_quotation', 'desc_remark'];
+  const FilterSection = ({ searchTerm, setSearchTerm, filters, setFilters, dropdownOptions, isSheet = false }) => {
+    const baseCols = ['stage_name', 'branch_no', 'province', 'create_month', 'create_year', 'owner_name', 'source_name', 'site_name', 'desc_ads', 'desc_opportunity', 'desc_cause', 'desc_quotation', 'desc_remark'];
+    const filterableCols = isSheet ? [...baseCols, 'fb_ads_sheet'] : baseCols;
+    
     return (
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-6 relative z-10">
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4">
@@ -606,11 +622,11 @@ export default function App() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {filterableCols.map(colId => {
-            const colDef = availableColumns.find(c => c.id === colId);
+            const colDef = availableColumns.find(c => c.id === colId) || sheetReportColumns.find(c => c.id === colId);
             return (
               <MultiSelectDropdown 
-                key={colId} label={colDef.label} 
-                options={filterDropdownOptions[colId] || []}
+                key={colId} label={colDef?.label || colId} 
+                options={dropdownOptions[colId] || []}
                 selected={filters[colId] || []}
                 onChange={(newVals) => setFilters(prev => ({ ...prev, [colId]: newVals }))}
               />
@@ -696,7 +712,7 @@ export default function App() {
             {/* -------------------- TAB 1: DASHBOARD -------------------- */}
             {activeTab === 'dashboard' && (
               <div className="animate-in fade-in duration-300 space-y-6">
-                <FilterSection searchTerm={dashSearchTerm} setSearchTerm={setDashSearchTerm} filters={dashFilters} setFilters={setDashFilters} />
+                <FilterSection searchTerm={dashSearchTerm} setSearchTerm={setDashSearchTerm} filters={dashFilters} setFilters={setDashFilters} dropdownOptions={filterDropdownOptions} />
                 
                 {/* Metric Cards Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -862,7 +878,7 @@ export default function App() {
             {/* -------------------- TAB 2: DATA TABLE -------------------- */}
             {activeTab === 'table' && (
               <div className="animate-in fade-in duration-300">
-                <FilterSection searchTerm={tableSearchTerm} setSearchTerm={setTableSearchTerm} filters={tableFilters} setFilters={setTableFilters} />
+                <FilterSection searchTerm={tableSearchTerm} setSearchTerm={setTableSearchTerm} filters={tableFilters} setFilters={setTableFilters} dropdownOptions={filterDropdownOptions} />
 
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 relative z-0">
                   <div className="flex items-center gap-4 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 flex-wrap w-full lg:w-auto">
@@ -1014,53 +1030,70 @@ export default function App() {
                 </div>
 
                 {sheetMatchedData.length > 0 && (
-                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col z-0 relative">
-                    <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
-                      <h3 className="font-semibold text-slate-800">พบข้อมูลที่ตรงกัน {sheetMatchedData.length.toLocaleString()} รายการ</h3>
-                      <button 
-                        onClick={() => handleExport('csv', sheetMatchedData, sheetReportColumns)}
-                        className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-100 transition"
-                      >
-                        <Download size={16} /> Export เป็น CSV (รูปแบบใหม่)
-                      </button>
-                    </div>
-                    
-                    <div className="overflow-auto max-h-[600px] w-full rounded-b-2xl">
-                      <table className="w-full text-sm text-left whitespace-nowrap">
-                        <thead className="text-xs text-slate-600 bg-slate-100 sticky top-0 z-10 shadow-sm">
-                          <tr>
-                            <th className="px-4 py-3 font-semibold w-12 text-center border-b border-slate-200">#</th>
-                            {sheetReportColumns.map(col => (
-                              <th key={col.id} className="px-4 py-3 font-semibold tracking-wider border-b border-slate-200">
-                                {col.label}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {sheetMatchedData.map((row, index) => (
-                            <tr key={index} className="hover:bg-blue-50/50 transition-colors bg-white">
-                              <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
-                              {sheetReportColumns.map(col => {
-                                const isAmount = col.id === 'total_amount';
-                                const val = row[col.id];
-                                let displayVal = val;
-                                if (isAmount && val) {
-                                  const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ""));
-                                  displayVal = !isNaN(num) ? num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : val;
-                                }
-                                return (
-                                  <td key={col.id} className={`px-4 py-3 text-slate-700 max-w-[250px] truncate ${isAmount ? 'text-right font-medium' : ''} ${col.id === 'fb_ads_sheet' ? 'bg-amber-50 font-medium' : ''}`} title={val || '-'}>
-                                    {val ? displayVal : <span className="text-slate-300">-</span>}
-                                  </td>
-                                )
-                              })}
+                  <>
+                    <FilterSection 
+                      searchTerm={sheetSearchTerm} 
+                      setSearchTerm={setSheetSearchTerm} 
+                      filters={sheetFilters} 
+                      setFilters={setSheetFilters} 
+                      dropdownOptions={sheetFilterDropdownOptions}
+                      isSheet={true}
+                    />
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col z-0 relative">
+                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                        <h3 className="font-semibold text-slate-800">
+                          พบข้อมูล {filteredSheetData.length.toLocaleString()} รายการ 
+                          <span className="text-slate-500 font-normal text-sm ml-2">(จากที่ดึงสำเร็จทั้งหมด {sheetMatchedData.length.toLocaleString()} รายการ)</span>
+                        </h3>
+                        <button 
+                          onClick={() => handleExport('csv', filteredSheetData, sheetReportColumns)}
+                          className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-100 transition"
+                        >
+                          <Download size={16} /> Export เป็น CSV
+                        </button>
+                      </div>
+                      
+                      <div className="overflow-auto max-h-[600px] w-full rounded-b-2xl">
+                        <table className="w-full text-sm text-left whitespace-nowrap">
+                          <thead className="text-xs text-slate-600 bg-slate-100 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                              <th className="px-4 py-3 font-semibold w-12 text-center border-b border-slate-200">#</th>
+                              {sheetReportColumns.map(col => (
+                                <th key={col.id} className="px-4 py-3 font-semibold tracking-wider border-b border-slate-200">
+                                  {col.label}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {filteredSheetData.map((row, index) => (
+                              <tr key={index} className="hover:bg-blue-50/50 transition-colors bg-white">
+                                <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
+                                {sheetReportColumns.map(col => {
+                                  const isAmount = col.id === 'total_amount';
+                                  const val = row[col.id];
+                                  let displayVal = val;
+                                  if (isAmount && val) {
+                                    const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ""));
+                                    displayVal = !isNaN(num) ? num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : val;
+                                  }
+                                  return (
+                                    <td key={col.id} className={`px-4 py-3 text-slate-700 max-w-[250px] truncate ${isAmount ? 'text-right font-medium' : ''} ${col.id === 'fb_ads_sheet' ? 'bg-amber-50 font-medium' : ''}`} title={val || '-'}>
+                                      {val ? displayVal : <span className="text-slate-300">-</span>}
+                                    </td>
+                                  )
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {filteredSheetData.length === 0 && (
+                          <div className="text-center py-10 text-slate-500 bg-white">ไม่พบข้อมูลที่ตรงกับเงื่อนไขการกรอง</div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             )}
