@@ -8,6 +8,7 @@ const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // ตรวจสอบว่าคลิกที่ไหน ถ้าไม่ได้คลิกใน dropdown นี้ ให้ปิด
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
       }
@@ -37,16 +38,33 @@ const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
       </button>
       
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 max-h-64 overflow-auto">
-          <div className="p-2 border-b border-slate-100 bg-slate-50 sticky top-0 flex justify-between z-10">
-            <button onClick={() => onChange([])} className="text-xs text-blue-600 hover:text-blue-800 font-medium">ล้างทั้งหมด</button>
-            <button onClick={() => onChange([...options])} className="text-xs text-slate-500 hover:text-slate-800 font-medium">เลือกทั้งหมด</button>
+        <div className="absolute z-50 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 max-h-64 overflow-auto flex flex-col">
+          <div className="p-2 border-b border-slate-100 bg-slate-50 sticky top-0 flex justify-between z-10 shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); onChange([]); }} className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1">ล้างทั้งหมด</button>
+            <button onClick={(e) => { e.stopPropagation(); onChange([...options]); }} className="text-xs text-slate-500 hover:text-slate-800 font-medium px-2 py-1">เลือกทั้งหมด</button>
           </div>
-          <ul className="py-1">
+          <ul className="py-1 flex-1 overflow-auto">
             {options.map((opt, idx) => (
-              <li key={idx} className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-start transition-colors" onClick={() => toggleOption(opt)}>
-                <input type="checkbox" checked={selected.includes(opt)} readOnly className="mt-0.5 mr-2 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
-                <span className="text-sm text-slate-700 break-words leading-tight">{opt === '' ? '(ไม่มีข้อมูล)' : opt}</span>
+              <li 
+                key={idx} 
+                className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-start transition-colors" 
+                onClick={(e) => {
+                  e.stopPropagation(); // ป้องกันการกระจาย event ไปยังปุ่มเปิด/ปิด
+                  toggleOption(opt);
+                }}
+              >
+                <div className="flex items-center h-5 mt-0.5">
+                  <input 
+                    type="checkbox" 
+                    checked={selected.includes(opt)} 
+                    readOnly 
+                    className="cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" 
+                    onClick={(e) => e.stopPropagation()} // ป้องกันการกดตรง checkbox แล้วเกิด event ซ้ำซ้อน
+                  />
+                </div>
+                <div className="ml-2 text-sm text-slate-700 break-words leading-tight w-full">
+                  {opt === '' ? '(ไม่มีข้อมูล)' : opt}
+                </div>
               </li>
             ))}
             {options.length === 0 && <li className="px-3 py-2 text-sm text-slate-400 text-center">ไม่มีตัวเลือก</li>}
@@ -439,43 +457,46 @@ export default function App() {
       const validSheetRows = sheetRows.slice(1).filter(r => r.length > 5);
       const matchedData = [];
       
-      mergedData.forEach(localRow => {
-         const localContact = String(localRow.contact_name || '').replace(/\s+/g, '').toLowerCase();
-         const localOwner = String(localRow.owner_name || '');
-         
-         // ดึงข้อมูลในวงเล็บของพนักงานจากไฟล์ที่อัปโหลด
-         const parenMatch = localOwner.match(/\(([^)]+)\)/);
-         const localOwnerParen = parenMatch ? parenMatch[1].trim().toLowerCase() : localOwner.toLowerCase();
+      // วนลูปจากชีทเป็นหลัก เพื่อให้ได้ลูกค้ายึดตามรายชื่อในชีท
+      validSheetRows.forEach(sRow => {
+        const sCustName = String(sRow[4] || '').trim(); // เก็บชื่อเต็มไว้โชว์
+        const sCustNameClean = sCustName.replace(/\s+/g, '').toLowerCase(); // ใช้สำหรับเปรียบเทียบ
+        const sOwnerName = String(sRow[5] || '').trim().toLowerCase(); // Col F
+        
+        if (!sCustNameClean || !sOwnerName || sCustNameClean === '' || sOwnerName === '') return;
 
-         // ค้นหาแถวใน Sheets ที่ตรงเงื่อนไข
-         const match = validSheetRows.find(sRow => {
-            const sCustName = String(sRow[4] || '').replace(/\s+/g, '').toLowerCase(); // Col E
-            const sOwnerName = String(sRow[5] || '').trim().toLowerCase(); // Col F
-            
-            if (!sCustName || !sOwnerName || sCustName === '' || sOwnerName === '') return false;
+        // ค้นหาในไฟล์อัปโหลดว่ามีลูกค้าและพนักงานตรงกันไหม
+        const match = mergedData.find(localRow => {
+          const localContact = String(localRow.contact_name || '').replace(/\s+/g, '').toLowerCase();
+          const localOwner = String(localRow.owner_name || '');
+          
+          // ดึงข้อมูลในวงเล็บของพนักงานจากไฟล์ที่อัปโหลด
+          const parenMatch = localOwner.match(/\(([^)]+)\)/);
+          const localOwnerParen = parenMatch ? parenMatch[1].trim().toLowerCase() : localOwner.toLowerCase();
 
-            // ตรวจสอบชื่อลูกค้า (หากชื่อใดชื่อหนึ่งเป็นซับสตริงของอีกฝ่าย)
-            const isCustMatch = (localContact !== '' && (localContact.includes(sCustName) || sCustName.includes(localContact)));
-            
-            // ตรวจสอบพนักงาน (เช็คว่าใน Sheets ตรงกับในวงเล็บ หรือตรงกับชื่อเต็มแบบมีส่วนคล้าย)
-            const isOwnerMatch = (sOwnerName === localOwnerParen || localOwner.toLowerCase().includes(sOwnerName));
-            
-            return isCustMatch && isOwnerMatch;
-         });
+          // ตรวจสอบชื่อลูกค้า (หากชื่อใดชื่อหนึ่งเป็นซับสตริงของอีกฝ่าย)
+          const isCustMatch = (localContact !== '' && (localContact.includes(sCustNameClean) || sCustNameClean.includes(localContact)));
+          
+          // ตรวจสอบพนักงาน (เช็คว่าใน Sheets ตรงกับในวงเล็บ หรือตรงกับชื่อเต็มแบบมีส่วนคล้าย)
+          const isOwnerMatch = (sOwnerName === localOwnerParen || localOwner.toLowerCase().includes(sOwnerName));
+          
+          return isCustMatch && isOwnerMatch;
+        });
 
-         // หากตรงกัน (Lead เดียวกัน) ให้นำข้อมูล fb_ads มาใส่
-         if (match) {
-             matchedData.push({
-                 ...localRow,
-                 fb_ads_sheet: String(match[9] || '').replace(/^["']|["']$/g, '').trim() // Col J
-             });
-         }
+        // หากเจอ Lead ตรงกัน ให้นำข้อมูล fb_ads มาใส่ และยึดชื่อ contact_name จากชีท
+        if (match) {
+            matchedData.push({
+                ...match,
+                contact_name: sCustName, // ยึดชื่อลูกค้าจากชีท
+                fb_ads_sheet: String(sRow[9] || '').replace(/^["']|["']$/g, '').trim() // Col J
+            });
+        }
       });
       
       setSheetMatchedData(matchedData);
       
       if (matchedData.length === 0) {
-          setSheetError('ดึงข้อมูลสำเร็จ แต่ไม่พบข้อมูลที่ตรงกันเลย (โปรดตรวจสอบการจับคู่ Contact Name และตัวอักษรย่อในวงเล็บ Owner Name)');
+          setSheetError('ดึงข้อมูลสำเร็จ แต่ไม่พบข้อมูลที่ตรงกันเลย (โปรดตรวจสอบการจับคู่ชื่อลูกค้า และตัวอักษรย่อในวงเล็บ Owner Name)');
       }
     } catch (err) {
       setSheetError(err.message);
