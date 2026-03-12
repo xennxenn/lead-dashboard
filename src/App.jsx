@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { UploadCloud, FileText, CheckSquare, Square, Table as TableIcon, PieChart, AlertCircle, FileSpreadsheet, Search, Filter, Settings, Download, Calculator, LayoutDashboard, List, ChevronDown, X, BarChart3, MousePointerClick, DollarSign } from 'lucide-react';
+import { UploadCloud, FileText, CheckSquare, Square, Table as TableIcon, PieChart, AlertCircle, FileSpreadsheet, Search, Filter, Settings, Download, Calculator, LayoutDashboard, List, ChevronDown, X, BarChart3, MousePointerClick, DollarSign, Database, RefreshCw } from 'lucide-react';
 
 // --- Component: Dropdown Multi-Select ---
 const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
@@ -58,14 +58,14 @@ const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard'); 
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | table | sheets
   const [mainFile, setMainFile] = useState(null);
   const [statusFile, setStatusFile] = useState(null);
-  const [salesFile, setSalesFile] = useState(null); // เพิ่มไฟล์ที่ 3
+  const [salesFile, setSalesFile] = useState(null); 
   
   const [mainData, setMainData] = useState([]);
   const [statusData, setStatusData] = useState([]);
-  const [salesData, setSalesData] = useState([]); // ข้อมูลไฟล์ที่ 3
+  const [salesData, setSalesData] = useState([]); 
   const [mergedData, setMergedData] = useState([]);
   
   const [dashSearchTerm, setDashSearchTerm] = useState('');
@@ -79,16 +79,20 @@ export default function App() {
   const [showColumnSelector, setShowColumnSelector] = useState(false); 
   
   const [encoding, setEncoding] = useState('windows-874');
-
   const [drillDown, setDrillDown] = useState({ isOpen: false, title: '', data: [] });
+
+  // --- States สำหรับแท็บ Sheets ---
+  const [isFetchingSheet, setIsFetchingSheet] = useState(false);
+  const [sheetMatchedData, setSheetMatchedData] = useState([]);
+  const [sheetError, setSheetError] = useState('');
 
   const availableColumns = [
     { id: 'Lead_no', label: 'Lead No.' },
     { id: 'stage_name', label: 'Stage Name' },
     { id: 'contact_name', label: 'Contact Name' },
     { id: 'cs_phone', label: 'CS Phone' },
-    { id: 'total_amount', label: 'Total Amount' }, // คอลัมน์ใหม่จากยอด Sales
-    { id: 'payment_duration_days', label: 'Payment Duration (Days)' }, // คอลัมน์ใหม่สำหรับระยะเวลาชำระเงิน
+    { id: 'total_amount', label: 'Total Amount' }, 
+    { id: 'payment_duration_days', label: 'Payment Duration (Days)' }, 
     { id: 'source_name', label: 'Source Name' },
     { id: 'site_name', label: 'Site Name' },
     { id: 'owner_name', label: 'Owner Name' },
@@ -107,6 +111,30 @@ export default function App() {
     { id: 'desc_remark', label: '[แยก] 5. Remark' },
   ];
 
+  const sheetReportColumns = [
+    { id: 'Lead_no', label: '1. Lead No.' },
+    { id: 'stage_name', label: '2. Stage Name' },
+    { id: 'contact_name', label: '3. Contact Name' },
+    { id: 'cs_phone', label: '4. CS Phone' },
+    { id: 'total_amount', label: '5. Total Amount' },
+    { id: 'payment_duration_days', label: '6. Payment Duration' },
+    { id: 'source_name', label: '7. Source Name' },
+    { id: 'fb_ads_sheet', label: '7.1 FB Ads (จาก Sheet)' },
+    { id: 'site_name', label: '8. Site Name' },
+    { id: 'owner_name', label: '9. Owner Name' },
+    { id: 'branch_no', label: '10. Branch No.' },
+    { id: 'province', label: '11. Province' },
+    { id: 'no_of_installation', label: '12. No. of Installation' },
+    { id: 'time_frame_month', label: '13. Time Frame' },
+    { id: 'create_month', label: '14. Create Month' },
+    { id: 'create_year', label: '15. Create Year' },
+    { id: 'desc_ads', label: '16.1 [แยก] Ads' },
+    { id: 'desc_opportunity', label: '16.2 [แยก] Opportunity' },
+    { id: 'desc_cause', label: '16.3 [แยก] Cause' },
+    { id: 'desc_quotation', label: '16.4 [แยก] Quotation Amount' },
+    { id: 'desc_remark', label: '16.5 [แยก] Remark' },
+  ];
+
   const [selectedColumns, setSelectedColumns] = useState(
     availableColumns.filter(c => !['discriptions', 'create_date'].includes(c.id)).map(c => c.id)
   );
@@ -121,7 +149,6 @@ export default function App() {
     return match ? match.original : null;
   };
 
-  // ค้นหาคอลัมน์ total_amount แบบฉลาดขึ้น
   const findTotalAmountKey = (row) => {
     if (!row) return null;
     const keys = Object.keys(row);
@@ -130,7 +157,6 @@ export default function App() {
     return match ? match.original : null;
   };
 
-  // ค้นหาคอลัมน์ r_status แบบฉลาดขึ้น
   const findRStatusKey = (row) => {
     if (!row) return null;
     const keys = Object.keys(row);
@@ -139,7 +165,6 @@ export default function App() {
     return match ? match.original : null;
   };
 
-  // ค้นหาคอลัมน์ receipt_date แบบฉลาดขึ้น
   const findReceiptDateKey = (row) => {
     if (!row) return null;
     const keys = Object.keys(row);
@@ -148,21 +173,19 @@ export default function App() {
     return match ? match.original : null;
   };
 
-  // ฟังก์ชันแปลงวันที่ให้เป็น Object (รองรับ พ.ศ. และรูปแบบที่หลากหลาย)
   const normalizeDate = (dateStr) => {
     if (!dateStr) return null;
-    const dStr = String(dateStr).split(' ')[0]; // ตัดเวลาทิ้ง
+    const dStr = String(dateStr).split(' ')[0]; 
     const parts = dStr.includes('/') ? dStr.split('/') : dStr.split('-');
     if (parts.length === 3) {
       let year, month, day;
-      if (parts[0].length === 4) { // YYYY-MM-DD
+      if (parts[0].length === 4) { 
         year = parseInt(parts[0]); month = parseInt(parts[1]); day = parseInt(parts[2]);
-      } else if (parts[2].length === 4) { // DD/MM/YYYY
+      } else if (parts[2].length === 4) { 
         year = parseInt(parts[2]); month = parseInt(parts[1]); day = parseInt(parts[0]);
       } else {
         return new Date(dateStr);
       }
-      // แปลง พ.ศ. เป็น ค.ศ.
       if (year > 2500) year -= 543;
       const dateObj = new Date(year, month - 1, day);
       return isNaN(dateObj.getTime()) ? null : dateObj;
@@ -247,7 +270,29 @@ export default function App() {
     return data;
   };
 
-  // Readers
+  // Parser เฉพาะสำหรับ Google Sheets CSV เพื่อดึงตาม Index คอลัมน์ได้แม่นยำ
+  const parseCSVToArray = (str) => {
+    if (!str) return [];
+    const result = [];
+    let row = []; let inQuotes = false; let val = '';
+    for (let i = 0; i < str.length; i++) {
+      let char = str[i]; let nextChar = str[i + 1];
+      if (char === '"' && inQuotes && nextChar === '"') {
+        val += '"'; i++;
+      } else if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        row.push(val.trim().replace(/^["']|["']$/g, '')); val = '';
+      } else if (char === '\n' && !inQuotes) {
+        row.push(val.trim().replace(/^["']|["']$/g, '')); result.push(row); row = []; val = '';
+      } else if (char !== '\r') {
+        val += char;
+      }
+    }
+    if (val || row.length > 0) { row.push(val.trim().replace(/^["']|["']$/g, '')); result.push(row); }
+    return result;
+  };
+
   useEffect(() => {
     if (mainFile) {
       const reader = new FileReader();
@@ -272,9 +317,7 @@ export default function App() {
     } else setSalesData([]);
   }, [salesFile, encoding]);
 
-  // INNER JOIN + (Optional) LEFT JOIN with Sales Data
   useEffect(() => {
-    // ต้องมีข้อมูล 2 ไฟล์หลัก ถึงจะเริ่มการทำงาน
     if (mainData.length > 0 && statusData.length > 0) {
       const merged = [];
       mainData.forEach(mainRow => {
@@ -284,7 +327,6 @@ export default function App() {
         if (statusRow) {
           const combined = { ...mainRow, ...statusRow };
           
-          // ดึงข้อมูลยอดเงินจาก Sales Report (ถ้ามี) แบบรวมยอด (Sum) หลายรายการ
           if (salesData.length > 0) {
             const matchingSalesRows = salesData.filter(s => (s.Lead_no || '').toString().trim() === leadNo);
             
@@ -297,7 +339,6 @@ export default function App() {
                 const statusKey = findRStatusKey(salesRow);
                 const rStatus = statusKey ? String(salesRow[statusKey] || '').trim().toUpperCase() : '';
                 
-                // ถ้ายกเลิก (r_status เป็น C) จะไม่นำยอดมารวม
                 if (rStatus !== 'C') {
                   const amountKey = findTotalAmountKey(salesRow);
                   if (amountKey) {
@@ -307,7 +348,6 @@ export default function App() {
                     hasValidSale = true;
                   }
                   
-                  // ดึงวันที่ใบเสร็จ (Receipt Date) จากรายการแรกที่ valid
                   if (!firstValidReceiptDate) {
                     const receiptDateKey = findReceiptDateKey(salesRow);
                     if (receiptDateKey) firstValidReceiptDate = salesRow[receiptDateKey];
@@ -344,7 +384,6 @@ export default function App() {
           combined.create_month = cMonth;
           combined.create_year = cYear;
 
-          // คำนวณระยะเวลาการชำระเงิน (วัน)
           if (combined.create_date && combined.receipt_date) {
             const createDateObj = normalizeDate(combined.create_date);
             const receiptDateObj = normalizeDate(combined.receipt_date);
@@ -352,7 +391,6 @@ export default function App() {
             if (createDateObj && receiptDateObj) {
               const diffTime = receiptDateObj.getTime() - createDateObj.getTime();
               const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-              // ถ้าระยะเวลาติดลบ (เช่น ลงวันที่ผิด) จะให้เป็น 0 หรือแสดงตามจริง
               combined.payment_duration_days = diffDays;
             }
           }
@@ -361,10 +399,86 @@ export default function App() {
         }
       });
       setMergedData(merged);
+      
+      // ล้างข้อมูล Sheets เมื่ออัปโหลดไฟล์ใหม่
+      setSheetMatchedData([]);
+      setSheetError('');
     } else {
       setMergedData([]);
     }
   }, [mainData, statusData, salesData]);
+
+  // --- ฟังก์ชันสำหรับดึงข้อมูลและเปรียบเทียบกับ Google Sheets ---
+  const fetchAndMatchSheetData = async () => {
+    if (mergedData.length === 0) {
+      setSheetError('กรุณาอัปโหลดไฟล์หลักและสถานะให้เรียบร้อยก่อนดึงข้อมูลจาก Sheets');
+      return;
+    }
+    
+    setIsFetchingSheet(true);
+    setSheetError('');
+    
+    try {
+      // ดึงข้อมูลผ่าน Google Visualization API (CSV Format)
+      const url = `https://docs.google.com/spreadsheets/d/1ylOdq95VrnxyFJ0r5n7uQIgyJ_KZRb1Mi8SC7xdC6ZM/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('LEAD รายคน/week')}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) throw new Error('ไม่สามารถดึงข้อมูลจากลิงก์ Google Sheets ได้ โปรดตรวจสอบการตั้งค่าแชร์เป็นสาธารณะ');
+      
+      const csvText = await response.text();
+      const sheetRows = parseCSVToArray(csvText);
+      
+      if (sheetRows.length < 2) throw new Error('ไม่พบข้อมูลใน Google Sheets หรือชีทว่างเปล่า');
+      
+      // สมมติว่า Row 0 คือหัวตาราง ข้อมูลเริ่มที่ Row 1
+      // Col E (ชื่อลูกค้า) = Index 4, Col F (ชื่อพนักงาน) = Index 5, Col J (FB Ads) = Index 9
+      const validSheetRows = sheetRows.slice(1).filter(r => r.length > 5);
+      const matchedData = [];
+      
+      mergedData.forEach(localRow => {
+         const localContact = String(localRow.contact_name || '').replace(/\s+/g, '').toLowerCase();
+         const localOwner = String(localRow.owner_name || '');
+         
+         // ดึงข้อมูลในวงเล็บของพนักงานจากไฟล์ที่อัปโหลด
+         const parenMatch = localOwner.match(/\(([^)]+)\)/);
+         const localOwnerParen = parenMatch ? parenMatch[1].trim().toLowerCase() : localOwner.toLowerCase();
+
+         // ค้นหาแถวใน Sheets ที่ตรงเงื่อนไข
+         const match = validSheetRows.find(sRow => {
+            const sCustName = String(sRow[4] || '').replace(/\s+/g, '').toLowerCase(); // Col E
+            const sOwnerName = String(sRow[5] || '').trim().toLowerCase(); // Col F
+            
+            if (!sCustName || !sOwnerName || sCustName === '' || sOwnerName === '') return false;
+
+            // ตรวจสอบชื่อลูกค้า (หากชื่อใดชื่อหนึ่งเป็นซับสตริงของอีกฝ่าย)
+            const isCustMatch = (localContact !== '' && (localContact.includes(sCustName) || sCustName.includes(localContact)));
+            
+            // ตรวจสอบพนักงาน (เช็คว่าใน Sheets ตรงกับในวงเล็บ หรือตรงกับชื่อเต็มแบบมีส่วนคล้าย)
+            const isOwnerMatch = (sOwnerName === localOwnerParen || localOwner.toLowerCase().includes(sOwnerName));
+            
+            return isCustMatch && isOwnerMatch;
+         });
+
+         // หากตรงกัน (Lead เดียวกัน) ให้นำข้อมูล fb_ads มาใส่
+         if (match) {
+             matchedData.push({
+                 ...localRow,
+                 fb_ads_sheet: String(match[9] || '').replace(/^["']|["']$/g, '').trim() // Col J
+             });
+         }
+      });
+      
+      setSheetMatchedData(matchedData);
+      
+      if (matchedData.length === 0) {
+          setSheetError('ดึงข้อมูลสำเร็จ แต่ไม่พบข้อมูลที่ตรงกันเลย (โปรดตรวจสอบการจับคู่ Contact Name และตัวอักษรย่อในวงเล็บ Owner Name)');
+      }
+    } catch (err) {
+      setSheetError(err.message);
+    } finally {
+      setIsFetchingSheet(false);
+    }
+  };
 
   const filterDropdownOptions = useMemo(() => {
     const options = {};
@@ -391,7 +505,7 @@ export default function App() {
   const filteredDashboardData = useMemo(() => applyFilters(mergedData, dashSearchTerm, dashFilters), [mergedData, dashSearchTerm, dashFilters]);
   const filteredTableData = useMemo(() => applyFilters(mergedData, tableSearchTerm, tableFilters), [mergedData, tableSearchTerm, tableFilters]);
 
-  // Dashboard Calculations with Amount
+  // Dashboard Calculations
   const dashboardStats = useMemo(() => {
     const stats = { total: filteredDashboardData.length, totalAmount: 0, totalSalesCount: 0, groups: {}, maxCount: 0, maxAmount: 0 };
     
@@ -399,26 +513,20 @@ export default function App() {
       let key = String(row[summaryBy] || '(ไม่มีข้อมูล)').trim();
       if (key === '') key = '(ไม่มีข้อมูล)';
       
-      // แปลงยอดเงินให้เป็นตัวเลขที่คำนวณได้ (ตัด comma หรือตัวอักษรออก)
       const amountStr = String(row.total_amount || '0').replace(/[^0-9.-]+/g, "");
       const amount = parseFloat(amountStr) || 0;
       
       stats.totalAmount += amount;
 
-      // นับจำนวนรายการที่มีข้อมูล total_amount (เช็คค่า 0 ที่เกิดจากผลรวมด้วย)
       const hasSales = row.total_amount !== undefined && row.total_amount !== null && String(row.total_amount).trim() !== '';
-      if (hasSales) {
-        stats.totalSalesCount += 1;
-      }
+      if (hasSales) stats.totalSalesCount += 1;
 
       if (!stats.groups[key]) {
         stats.groups[key] = { count: 0, amount: 0, salesCount: 0 };
       }
       stats.groups[key].count += 1;
       stats.groups[key].amount += amount;
-      if (hasSales) {
-        stats.groups[key].salesCount += 1;
-      }
+      if (hasSales) stats.groups[key].salesCount += 1;
 
       if (stats.groups[key].count > stats.maxCount) stats.maxCount = stats.groups[key].count;
       if (stats.groups[key].amount > stats.maxAmount) stats.maxAmount = stats.groups[key].amount;
@@ -459,18 +567,17 @@ export default function App() {
   };
   const aggResult = calculateAggregations();
 
-  const handleExport = (format, dataToExport = filteredTableData) => {
-    const cols = availableColumns.filter(c => selectedColumns.includes(c.id));
+  const handleExport = (format, dataToExport = filteredTableData, useColumns = availableColumns.filter(c => selectedColumns.includes(c.id))) => {
     let content = '';
     if (format === 'csv') {
-      content += cols.map(c => `"${c.label}"`).join(',') + '\n';
+      content += useColumns.map(c => `"${c.label}"`).join(',') + '\n';
       dataToExport.forEach(row => {
-        content += cols.map(c => `"${String(row[c.id] || '').replace(/"/g, '""')}"`).join(',') + '\n';
+        content += useColumns.map(c => `"${String(row[c.id] || '').replace(/"/g, '""')}"`).join(',') + '\n';
       });
     } else {
-      content += cols.map(c => c.label).join('\t') + '\n';
+      content += useColumns.map(c => c.label).join('\t') + '\n';
       dataToExport.forEach(row => {
-        content += cols.map(c => String(row[c.id] || '').replace(/\t/g, ' ')).join('\t') + '\n';
+        content += useColumns.map(c => String(row[c.id] || '').replace(/\t/g, ' ')).join('\t') + '\n';
       });
     }
     const blob = new Blob(['\uFEFF' + content], { type: format === 'csv' ? 'text/csv;charset=utf-8;' : 'text/plain;charset=utf-8;' });
@@ -574,12 +681,15 @@ export default function App() {
         {mergedData.length > 0 && (
           <>
             {/* Tabs Navigation */}
-            <div className="flex space-x-2 border-b border-slate-200 mb-6">
-              <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-2 px-6 py-3 font-semibold text-sm rounded-t-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-b-0 border-slate-200'}`}>
+            <div className="flex space-x-2 border-b border-slate-200 mb-6 overflow-x-auto">
+              <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-2 px-6 py-3 font-semibold text-sm rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-b-0 border-slate-200'}`}>
                 <LayoutDashboard size={18} /> สรุปผล Dashboard
               </button>
-              <button onClick={() => setActiveTab('table')} className={`flex items-center gap-2 px-6 py-3 font-semibold text-sm rounded-t-lg transition-colors ${activeTab === 'table' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-b-0 border-slate-200'}`}>
+              <button onClick={() => setActiveTab('table')} className={`flex items-center gap-2 px-6 py-3 font-semibold text-sm rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'table' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-b-0 border-slate-200'}`}>
                 <List size={18} /> ตารางข้อมูลรายละเอียด
+              </button>
+              <button onClick={() => setActiveTab('sheets')} className={`flex items-center gap-2 px-6 py-3 font-semibold text-sm rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'sheets' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-b-0 border-slate-200'}`}>
+                <Database size={18} /> รายงานข้อมูลจาก Sheets
               </button>
             </div>
 
@@ -867,6 +977,91 @@ export default function App() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+            
+            {/* -------------------- TAB 3: SHEETS REPORT -------------------- */}
+            {activeTab === 'sheets' && (
+              <div className="animate-in fade-in duration-300 space-y-6">
+                
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-6 rounded-2xl shadow-sm">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-blue-900 flex items-center gap-2">
+                        <Database className="text-blue-600" size={20} />
+                        ดึงข้อมูลรายงานจาก Google Sheets
+                      </h2>
+                      <p className="text-sm text-blue-700 mt-1">
+                        ระบบจะทำการดึงข้อมูลจากชีท "LEAD รายคน/week" มาเปรียบเทียบกับไฟล์ที่อัปโหลด (เช็คชื่อลูกค้า และชื่อพนักงานในวงเล็บ) เพื่อหา Lead ที่ตรงกัน
+                      </p>
+                    </div>
+                    <button 
+                      onClick={fetchAndMatchSheetData}
+                      disabled={isFetchingSheet}
+                      className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-medium text-white shadow-md transition-all whitespace-nowrap ${isFetchingSheet ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5'}`}
+                    >
+                      <RefreshCw size={18} className={isFetchingSheet ? "animate-spin" : ""} />
+                      {isFetchingSheet ? 'กำลังดึงข้อมูล...' : 'ดึงข้อมูล / รีเฟรชข้อมูล'}
+                    </button>
+                  </div>
+                  
+                  {sheetError && (
+                    <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start gap-3">
+                      <AlertCircle size={20} className="shrink-0 mt-0.5" />
+                      <span className="text-sm">{sheetError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {sheetMatchedData.length > 0 && (
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col z-0 relative">
+                    <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                      <h3 className="font-semibold text-slate-800">พบข้อมูลที่ตรงกัน {sheetMatchedData.length.toLocaleString()} รายการ</h3>
+                      <button 
+                        onClick={() => handleExport('csv', sheetMatchedData, sheetReportColumns)}
+                        className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-100 transition"
+                      >
+                        <Download size={16} /> Export เป็น CSV (รูปแบบใหม่)
+                      </button>
+                    </div>
+                    
+                    <div className="overflow-auto max-h-[600px] w-full rounded-b-2xl">
+                      <table className="w-full text-sm text-left whitespace-nowrap">
+                        <thead className="text-xs text-slate-600 bg-slate-100 sticky top-0 z-10 shadow-sm">
+                          <tr>
+                            <th className="px-4 py-3 font-semibold w-12 text-center border-b border-slate-200">#</th>
+                            {sheetReportColumns.map(col => (
+                              <th key={col.id} className="px-4 py-3 font-semibold tracking-wider border-b border-slate-200">
+                                {col.label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {sheetMatchedData.map((row, index) => (
+                            <tr key={index} className="hover:bg-blue-50/50 transition-colors bg-white">
+                              <td className="px-4 py-3 text-center text-slate-400">{index + 1}</td>
+                              {sheetReportColumns.map(col => {
+                                const isAmount = col.id === 'total_amount';
+                                const val = row[col.id];
+                                let displayVal = val;
+                                if (isAmount && val) {
+                                  const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ""));
+                                  displayVal = !isNaN(num) ? num.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : val;
+                                }
+                                return (
+                                  <td key={col.id} className={`px-4 py-3 text-slate-700 max-w-[250px] truncate ${isAmount ? 'text-right font-medium' : ''} ${col.id === 'fb_ads_sheet' ? 'bg-amber-50 font-medium' : ''}`} title={val || '-'}>
+                                    {val ? displayVal : <span className="text-slate-300">-</span>}
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
