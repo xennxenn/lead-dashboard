@@ -284,21 +284,40 @@ export default function App() {
         if (statusRow) {
           const combined = { ...mainRow, ...statusRow };
           
-          // ดึงข้อมูลยอดเงินจาก Sales Report (ถ้ามี)
+          // ดึงข้อมูลยอดเงินจาก Sales Report (ถ้ามี) แบบรวมยอด (Sum) หลายรายการ
           if (salesData.length > 0) {
-            const salesRow = salesData.find(s => (s.Lead_no || '').toString().trim() === leadNo);
-            if (salesRow) {
-              const statusKey = findRStatusKey(salesRow);
-              const rStatus = statusKey ? String(salesRow[statusKey] || '').trim().toUpperCase() : '';
+            const matchingSalesRows = salesData.filter(s => (s.Lead_no || '').toString().trim() === leadNo);
+            
+            if (matchingSalesRows.length > 0) {
+              let totalAmountSum = 0;
+              let hasValidSale = false;
+              let firstValidReceiptDate = null;
               
-              // ถ้ายกเลิก (r_status เป็น C) จะไม่นำยอดมารวม
-              if (rStatus !== 'C') {
-                const amountKey = findTotalAmountKey(salesRow);
-                if (amountKey) combined.total_amount = salesRow[amountKey];
+              matchingSalesRows.forEach(salesRow => {
+                const statusKey = findRStatusKey(salesRow);
+                const rStatus = statusKey ? String(salesRow[statusKey] || '').trim().toUpperCase() : '';
                 
-                // ดึงวันที่ใบเสร็จ (Receipt Date)
-                const receiptDateKey = findReceiptDateKey(salesRow);
-                if (receiptDateKey) combined.receipt_date = salesRow[receiptDateKey];
+                // ถ้ายกเลิก (r_status เป็น C) จะไม่นำยอดมารวม
+                if (rStatus !== 'C') {
+                  const amountKey = findTotalAmountKey(salesRow);
+                  if (amountKey) {
+                    const amountStr = String(salesRow[amountKey] || '0').replace(/[^0-9.-]+/g, "");
+                    const amount = parseFloat(amountStr) || 0;
+                    totalAmountSum += amount;
+                    hasValidSale = true;
+                  }
+                  
+                  // ดึงวันที่ใบเสร็จ (Receipt Date) จากรายการแรกที่ valid
+                  if (!firstValidReceiptDate) {
+                    const receiptDateKey = findReceiptDateKey(salesRow);
+                    if (receiptDateKey) firstValidReceiptDate = salesRow[receiptDateKey];
+                  }
+                }
+              });
+              
+              if (hasValidSale) {
+                combined.total_amount = totalAmountSum;
+                if (firstValidReceiptDate) combined.receipt_date = firstValidReceiptDate;
               }
             }
           }
@@ -386,8 +405,8 @@ export default function App() {
       
       stats.totalAmount += amount;
 
-      // นับจำนวนรายการที่มีข้อมูล total_amount
-      const hasSales = row.total_amount && String(row.total_amount).trim() !== '';
+      // นับจำนวนรายการที่มีข้อมูล total_amount (เช็คค่า 0 ที่เกิดจากผลรวมด้วย)
+      const hasSales = row.total_amount !== undefined && row.total_amount !== null && String(row.total_amount).trim() !== '';
       if (hasSales) {
         stats.totalSalesCount += 1;
       }
@@ -588,7 +607,7 @@ export default function App() {
                     onDoubleClick={() => setDrillDown({ 
                       isOpen: true, 
                       title: 'รายการที่มียอด Sales', 
-                      data: filteredDashboardData.filter(d => d.total_amount && String(d.total_amount).trim() !== '') 
+                      data: filteredDashboardData.filter(d => d.total_amount !== undefined && d.total_amount !== null && String(d.total_amount).trim() !== '') 
                     })}
                   >
                     <CheckSquare className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32 group-hover:opacity-30 transition-opacity" />
@@ -604,7 +623,7 @@ export default function App() {
                     onDoubleClick={() => setDrillDown({ 
                       isOpen: true, 
                       title: 'รายการทั้งหมดที่นำมาคำนวณยอด Amount', 
-                      data: filteredDashboardData.filter(d => d.total_amount && String(d.total_amount).trim() !== '') 
+                      data: filteredDashboardData.filter(d => d.total_amount !== undefined && d.total_amount !== null && String(d.total_amount).trim() !== '') 
                     })}
                   >
                     <DollarSign className="absolute right-[-20px] bottom-[-20px] opacity-20 w-32 h-32 group-hover:opacity-30 transition-opacity" />
