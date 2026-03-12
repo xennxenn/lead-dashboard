@@ -566,6 +566,26 @@ export default function App() {
     return stats;
   }, [filteredDashboardData, summaryBy, dashSortOrder]);
 
+  // Sheets Report Summary Calculations
+  const sheetStats = useMemo(() => {
+    let total = filteredSheetData.length;
+    let salesCount = 0;
+    let totalAmount = 0;
+
+    filteredSheetData.forEach(row => {
+      const amountStr = String(row.total_amount || '0').replace(/[^0-9.-]+/g, "");
+      const amount = parseFloat(amountStr) || 0;
+      
+      const hasSales = row.total_amount !== undefined && row.total_amount !== null && String(row.total_amount).trim() !== '';
+      if (hasSales) {
+        salesCount += 1;
+      }
+      totalAmount += amount;
+    });
+
+    return { total, salesCount, totalAmount };
+  }, [filteredSheetData]);
+
   const calculateAggregations = () => {
     let count = filteredTableData.length;
     let sum = 0; let avg = 0; let validNumbers = 0;
@@ -1039,6 +1059,27 @@ export default function App() {
                       dropdownOptions={sheetFilterDropdownOptions}
                       isSheet={true}
                     />
+
+                    {/* --- Summary Cards for Sheets Tab --- */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                      <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-5 rounded-2xl shadow-sm text-white flex flex-col justify-center relative overflow-hidden">
+                        <PieChart className="absolute right-[-10px] bottom-[-10px] opacity-20 w-24 h-24" />
+                        <p className="text-blue-100 font-medium mb-1 text-sm">จำนวน Lead ทั้งหมด (ตามฟิลเตอร์)</p>
+                        <h2 className="text-3xl font-bold">{sheetStats.total.toLocaleString()} <span className="text-sm font-normal">รายการ</span></h2>
+                      </div>
+                      <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 p-5 rounded-2xl shadow-sm text-white flex flex-col justify-center relative overflow-hidden">
+                        <CheckSquare className="absolute right-[-10px] bottom-[-10px] opacity-20 w-24 h-24" />
+                        <p className="text-indigo-100 font-medium mb-1 text-sm">จำนวน Lead ที่มียอด</p>
+                        <h2 className="text-3xl font-bold">{sheetStats.salesCount.toLocaleString()} <span className="text-sm font-normal">รายการ</span></h2>
+                      </div>
+                      <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-5 rounded-2xl shadow-sm text-white flex flex-col justify-center relative overflow-hidden">
+                        <DollarSign className="absolute right-[-10px] bottom-[-10px] opacity-20 w-24 h-24" />
+                        <p className="text-emerald-100 font-medium mb-1 text-sm">ยอดรวม (Total Amount)</p>
+                        <h2 className="text-3xl font-bold truncate">
+                          ฿ {sheetStats.totalAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        </h2>
+                      </div>
+                    </div>
 
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col z-0 relative">
                       <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
